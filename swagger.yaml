@@ -2,45 +2,225 @@ openapi: 3.0.0
 info:
   title: Product Service API
   version: 1.0.0
+  description: AWS Lambda-based product service API with DynamoDB backend
+servers:
+  - url: https://your-api-gateway-url.amazonaws.com
+    description: Production server
 paths:
   /products:
     get:
-      summary: Get list of products
+      summary: Get list of all products
+      description: Retrieves all products from the database with their stock information
       responses:
         '200':
-          description: OK
+          description: Successfully retrieved products list
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "https://d8331wah0ee5g.cloudfront.net"
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+                example: "true"
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Product'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a new product
+      description: Creates a new product with stock information using a DynamoDB transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product successfully created
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "https://d8331wah0ee5g.cloudfront.net"
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+                example: "true"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid product data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '409':
+          description: Product already exists or transaction conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /products/{productId}:
     get:
       summary: Get product by ID
+      description: Retrieves a specific product by its ID with stock information
       parameters:
         - in: path
           name: productId
           required: true
           schema:
             type: string
+            format: uuid
+          description: The unique identifier of the product
       responses:
         '200':
-          description: OK
+          description: Successfully retrieved product
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "https://d8331wah0ee5g.cloudfront.net"
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+                example: "true"
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
+        '400':
+          description: Missing or invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Product:
       type: object
+      required:
+        - id
+        - title
+        - price
+        - count
       properties:
-        id: { type: string }
-        title: { type: string }
-        price: { type: number }
-        count: { type: number }
-        description: { type: string }
-        image: { type: string }
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the product
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        title:
+          type: string
+          description: Product title
+          example: "Sample Product"
+        description:
+          type: string
+          description: Product description
+          example: "This is a sample product description"
+        price:
+          type: number
+          minimum: 0
+          description: Product price
+          example: 29.99
+        count:
+          type: number
+          minimum: 0
+          description: Available stock count
+          example: 100
+        image:
+          type: string
+          description: Product image URL
+          example: "https://example.com/image.jpg"
+    CreateProductRequest:
+      type: object
+      required:
+        - title
+        - price
+        - count
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Product title (required, non-empty string)
+          example: "New Product"
+        description:
+          type: string
+          description: Product description (optional)
+          example: "Description of the new product"
+        price:
+          type: number
+          minimum: 0.01
+          description: Product price (required, positive number)
+          example: 19.99
+        count:
+          type: number
+          minimum: 0
+          description: Initial stock count (required, non-negative number)
+          example: 50
+        image:
+          type: string
+          description: Product image URL (optional)
+          example: "https://example.com/new-image.jpg"
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Error message
+          example: "Internal Server Error"
+    ValidationError:
+      type: object
+      required:
+        - message
+        - errors
+      properties:
+        message:
+          type: string
+          description: General error message
+          example: "Invalid product data"
+        errors:
+          type: array
+          items:
+            type: string
+          description: Detailed validation error messages
+          example:
+            - "Title is required and must be a non-empty string"
+            - "Price is required and must be a positive number"
