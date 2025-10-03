@@ -7,7 +7,7 @@ jest.mock("@aws-sdk/client-dynamodb", () => ({
   TransactWriteItemsCommand: jest.fn()
 }));
 
-import { main as createProduct } from "../lib/handlers/createProduct";
+import { handler as createProduct } from "../lib/handlers/createProduct";
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda";
 
 // Mock UUID

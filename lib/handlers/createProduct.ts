@@ -12,7 +12,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Credentials": "true",
 };
 
-export const main: APIGatewayProxyHandler = async (event) => {
+export const handler: APIGatewayProxyHandler = async (event) => {
   console.log("POST /products - Incoming request:", {
     httpMethod: event.httpMethod,
     path: event.path,

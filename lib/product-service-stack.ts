@@ -47,7 +47,7 @@ export class ProductServiceStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(5),
-      handler: "createProduct.main",
+      handler: "createProduct.handler",
       code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
       environment: {
         PRODUCTS_TABLE: productsTable.tableName,

@@ -6,6 +6,8 @@
     "lib": [
       "es2022"
     ],
+    "outDir": "./dist",
+    "rootDir": "./",
     "declaration": true,
     "strict": true,
     "noImplicitAny": true,
@@ -21,12 +23,18 @@
     "experimentalDecorators": true,
     "strictPropertyInitialization": false,
     "skipLibCheck": true,
+    "isolatedModules": true,
     "typeRoots": [
       "./node_modules/@types"
     ]
   },
+  "include": [
+    "lib/**/*",
+    "bin/**/*"
+  ],
   "exclude": [
     "node_modules",
-    "cdk.out"
+    "cdk.out",
+    "dist"
   ]
 }

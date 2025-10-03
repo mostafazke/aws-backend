@@ -82,7 +82,8 @@ describe("getProductsList handler", () => {
           id: { S: p.id },
           title: { S: p.title },
           description: { S: p.description || "" },
-          price: { N: p.price.toString() }
+          price: { N: p.price.toString() },
+          image: { S: p.image || "" }
         }))
       })
       .mockResolvedValueOnce({
