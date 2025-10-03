@@ -60,7 +60,7 @@ export const PRODUCTS: Product[] = [
     count: 30,
     description:
       "High-capacity portable power bank with fast charging technology. Compatible with all smartphones and tablets. Includes LED display showing remaining power.",
-    image: "https://images.unsplash.com/photo-1609592278036-4b59dede8d30?w=400",
+    image: "https://images.unsplash.com/photo-1609081219090-a6d81d3085bf?w=400",
   },
   {
     id: "7567ec4b-b10c-48c5-9445-fc73c48a80a2",

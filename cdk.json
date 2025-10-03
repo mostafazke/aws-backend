@@ -1,5 +1,5 @@
 {
-  "app": "npx ts-node --prefer-ts-exts bin/aws_backend.ts",
+  "app": "node dist/bin/aws_backend.js",
   "watch": {
     "include": [
       "**"
@@ -8,12 +8,12 @@
       "README.md",
       "cdk*.json",
       "**/*.d.ts",
-      "**/*.js",
       "tsconfig.json",
       "package*.json",
       "yarn.lock",
       "node_modules",
-      "test"
+      "test",
+      "dist"
     ]
   },
   "context": {

@@ -1,6 +1,12 @@
-*.js
+# Compiled output
+dist/
+
+# Keep specific JS files
 !jest.config.js
+
+# Type definitions from compilation
 *.d.ts
+
 node_modules
 
 # CDK asset staging directory
