@@ -45,7 +45,7 @@ export class ImportServiceStack extends cdk.Stack {
         memorySize: 1024,
         timeout: cdk.Duration.seconds(5),
         handler: "importProductsFile.handler",
-        code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+        code: lambda.Code.fromAsset(path.resolve(__dirname, "../../lib/handlers")),
         environment: {
           IMPORT_BUCKET_NAME: this.importBucket.bucketName,
         },
@@ -57,7 +57,7 @@ export class ImportServiceStack extends cdk.Stack {
       memorySize: 1024,
       timeout: cdk.Duration.seconds(30),
       handler: "importFileParser.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      code: lambda.Code.fromAsset(path.resolve(__dirname, "../../lib/handlers")),
       environment: {
         IMPORT_BUCKET_NAME: this.importBucket.bucketName,
         CATALOG_ITEMS_QUEUE_URL: catalogItemsQueue.queueUrl,

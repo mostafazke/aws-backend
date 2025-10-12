@@ -1,4 +1,5 @@
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as cdk from "aws-cdk-lib";
 import * as path from "path";
@@ -15,46 +16,60 @@ export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const productsTable = new dynamodb.Table(this, "ProductsTable", {
-      tableName: "products",
-      partitionKey: { name: "id", type: dynamodb.AttributeType.STRING },
-    });
+    const productsTable = dynamodb.Table.fromTableName(
+      this,
+      "ProductsTable",
+      "products"
+    );
 
-    const stockTable = new dynamodb.Table(this, "StockTable", {
-      tableName: "stock",
-      partitionKey: { name: "product_id", type: dynamodb.AttributeType.STRING },
-    });
+    const stockTable = dynamodb.Table.fromTableName(
+      this,
+      "StockTable",
+      "stock"
+    );
 
-    const getProductsListFn = new lambda.Function(this, "GetProductsListFn", {
+    const getProductsListFn = new NodejsFunction(this, "GetProductsListFn", {
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(5),
-      handler: "getProductsList.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      entry: path.resolve(__dirname, "../../lib/handlers/getProductsList.ts"),
+      handler: "handler",
+      bundling: {
+        externalModules: ["@aws-sdk/*"],
+        forceDockerBundling: false,
+      },
       environment: {
         PRODUCTS_TABLE: productsTable.tableName,
         STOCK_TABLE: stockTable.tableName,
       },
     });
 
-    const getProductsByIdFn = new lambda.Function(this, "GetProductsByIdFn", {
+    const getProductsByIdFn = new NodejsFunction(this, "GetProductsByIdFn", {
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(5),
-      handler: "getProductsById.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      entry: path.resolve(__dirname, "../../lib/handlers/getProductsById.ts"),
+      handler: "handler",
+      bundling: {
+        externalModules: ["@aws-sdk/*"],
+        forceDockerBundling: false,
+      },
       environment: {
         PRODUCTS_TABLE: productsTable.tableName,
         STOCK_TABLE: stockTable.tableName,
       },
     });
 
-    const createProductFn = new lambda.Function(this, "CreateProductFn", {
+    const createProductFn = new NodejsFunction(this, "CreateProductFn", {
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(5),
-      handler: "createProduct.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      entry: path.resolve(__dirname, "../../lib/handlers/createProduct.ts"),
+      handler: "handler",
+      bundling: {
+        externalModules: ["@aws-sdk/*"],
+        forceDockerBundling: false,
+      },
       environment: {
         PRODUCTS_TABLE: productsTable.tableName,
         STOCK_TABLE: stockTable.tableName,
@@ -63,6 +78,7 @@ export class ProductServiceStack extends cdk.Stack {
 
     this.catalogItemsQueue = new sqs.Queue(this, "catalog-items-queue", {
       queueName: "catalogItemsQueue",
+      visibilityTimeout: cdk.Duration.seconds(60),
     });
 
     const createProductTopic = new sns.Topic(this, "CreateProductTopic", {
@@ -78,6 +94,7 @@ export class ProductServiceStack extends cdk.Stack {
           "Email address that receives notifications about newly created products.",
         allowedPattern: "^.+@.+\\..+$",
         constraintDescription: "Must be a valid email address.",
+        default: "mostafazke@gmail.com",
       }
     );
 
@@ -87,15 +104,19 @@ export class ProductServiceStack extends cdk.Stack {
       )
     );
 
-    const catalogBatchProcessLambda = new lambda.Function(
+    const catalogBatchProcessLambda = new NodejsFunction(
       this,
       "catalog-batch-process",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         memorySize: 1024,
         timeout: cdk.Duration.seconds(60),
-        handler: "catalogBatchProcess.handler",
-        code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+        entry: path.resolve(__dirname, "../../lib/handlers/catalogBatchProcess.ts"),
+        handler: "handler",
+        bundling: {
+          externalModules: ["@aws-sdk/*"],
+          forceDockerBundling: false,
+        },
         environment: {
           PRODUCTS_TABLE: productsTable.tableName,
           STOCK_TABLE: stockTable.tableName,
