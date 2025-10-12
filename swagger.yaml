@@ -1,46 +1,373 @@
 openapi: 3.0.0
 info:
   title: Product Service API
-  version: 1.0.0
+  version: 1.1.0
+  description: |
+    AWS Lambda-based product service API with DynamoDB backend and CSV import functionality.
+    
+    ## Import Service Workflow
+    
+    1. **Generate Signed URL**: Call `GET /import?name=filename.csv` to get a pre-signed URL
+    2. **Upload CSV File**: Use the signed URL to upload your CSV file to S3
+    3. **Automatic Processing**: File upload triggers automatic CSV processing
+    4. **File Movement**: After processing, file is moved from `uploaded/` to `parsed/` folder
+    5. **CloudWatch Logs**: Processing results and individual records are logged
+    
+    ## CSV File Format
+    
+    The CSV file should contain the following columns:
+    - `title` (required): Product title
+    - `description` (optional): Product description  
+    - `price` (required): Product price as number
+    - `count` (optional): Stock count as number
+    
+    Example CSV content:
+    ```
+    title,description,price,count
+    iPhone 15,Latest iPhone model,999,10
+    Samsung Galaxy S24,Android flagship phone,899,15
+    ```
+servers:
+  - url: https://sqykxkhiyc.execute-api.us-east-1.amazonaws.com/prod
+    description: Production server (Product Service)
+  - url: https://l2ugac9rna.execute-api.us-east-1.amazonaws.com/prod
+    description: Import service server
 paths:
   /products:
     get:
-      summary: Get list of products
+      summary: Get list of all products
+      description: Retrieves all products from the database with their stock information
+      tags:
+        - Product Service
       responses:
         '200':
-          description: OK
+          description: Successfully retrieved products list
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "https://d8331wah0ee5g.cloudfront.net"
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+                example: "true"
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Product'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a new product
+      description: Creates a new product with stock information using a DynamoDB transaction
+      tags:
+        - Product Service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product successfully created
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "https://d8331wah0ee5g.cloudfront.net"
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+                example: "true"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid product data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '409':
+          description: Product already exists or transaction conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /products/{productId}:
     get:
       summary: Get product by ID
+      description: Retrieves a specific product by its ID with stock information
+      tags:
+        - Product Service
       parameters:
         - in: path
           name: productId
           required: true
           schema:
             type: string
+            format: uuid
+          description: The unique identifier of the product
       responses:
         '200':
-          description: OK
+          description: Successfully retrieved product
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "https://d8331wah0ee5g.cloudfront.net"
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+                example: "true"
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
+        '400':
+          description: Missing or invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /import:
+    get:
+      summary: Generate signed URL for CSV file upload
+      description: Creates a presigned URL for uploading CSV files to S3 bucket for product import
+      tags:
+        - Import Service
+      parameters:
+        - in: query
+          name: name
+          required: true
+          schema:
+            type: string
+            pattern: '^.*\.csv$'
+          description: The name of the CSV file to be uploaded (must end with .csv)
+          example: "products.csv"
+      responses:
+        '200':
+          description: Successfully generated signed URL
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+                example: "true"
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+                example: "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                example: "GET,OPTIONS"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedUrlResponse'
+        '400':
+          description: Missing or invalid file name parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    options:
+      summary: CORS preflight request
+      description: Handles CORS preflight requests for the import endpoint
+      tags:
+        - Import Service
+      responses:
+        '204':
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                example: "GET,OPTIONS"
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+                example: "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
 components:
   schemas:
     Product:
       type: object
+      required:
+        - id
+        - title
+        - price
+        - count
       properties:
-        id: { type: string }
-        title: { type: string }
-        price: { type: number }
-        count: { type: number }
-        description: { type: string }
-        image: { type: string }
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the product
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        title:
+          type: string
+          description: Product title
+          example: "Sample Product"
+        description:
+          type: string
+          description: Product description
+          example: "This is a sample product description"
+        price:
+          type: number
+          minimum: 0
+          description: Product price
+          example: 29.99
+        count:
+          type: number
+          minimum: 0
+          description: Available stock count
+          example: 100
+        image:
+          type: string
+          description: Product image URL
+          example: "https://example.com/image.jpg"
+    CreateProductRequest:
+      type: object
+      required:
+        - title
+        - price
+        - count
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Product title (required, non-empty string)
+          example: "New Product"
+        description:
+          type: string
+          description: Product description (optional)
+          example: "Description of the new product"
+        price:
+          type: number
+          minimum: 0.01
+          description: Product price (required, positive number)
+          example: 19.99
+        count:
+          type: number
+          minimum: 0
+          description: Initial stock count (required, non-negative number)
+          example: 50
+        image:
+          type: string
+          description: Product image URL (optional)
+          example: "https://example.com/new-image.jpg"
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Error message
+          example: "Internal Server Error"
+    ValidationError:
+      type: object
+      required:
+        - message
+        - errors
+      properties:
+        message:
+          type: string
+          description: General error message
+          example: "Invalid product data"
+        errors:
+          type: array
+          items:
+            type: string
+          description: Detailed validation error messages
+          example:
+            - "Title is required and must be a non-empty string"
+            - "Price is required and must be a positive number"
+    SignedUrlResponse:
+      type: object
+      required:
+        - signedUrl
+        - key
+        - bucketName
+      properties:
+        signedUrl:
+          type: string
+          format: uri
+          description: Pre-signed URL for uploading the CSV file to S3
+          example: "https://import-service-bucket-123456789012-us-east-1.s3.amazonaws.com/uploaded/products.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=..."
+        key:
+          type: string
+          description: S3 object key where the file will be stored
+          example: "uploaded/products.csv"
+        bucketName:
+          type: string
+          description: Name of the S3 bucket
+          example: "import-service-bucket-123456789012-us-east-1"
+    ImportProductRecord:
+      type: object
+      description: Structure of a product record in the CSV file for import
+      required:
+        - title
+        - price
+      properties:
+        title:
+          type: string
+          description: Product title
+          example: "iPhone 15"
+        description:
+          type: string
+          description: Product description
+          example: "Latest iPhone model"
+        price:
+          type: string
+          description: Product price (as string in CSV)
+          example: "999"
+        count:
+          type: string
+          description: Stock count (as string in CSV)
+          example: "10"
