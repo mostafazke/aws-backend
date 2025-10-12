@@ -1,9 +1,6 @@
 import { APIGatewayProxyHandler } from "aws-lambda";
-import {
-  DynamoDBClient,
-  TransactWriteItemsCommand,
-} from "@aws-sdk/client-dynamodb";
-const uuidv4 = require("uuid").v4;
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { ProductService } from "../services/productService";
 
 const client = new DynamoDBClient({ region: "us-east-1" });
 
@@ -23,35 +20,16 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
   try {
     const body = JSON.parse(event.body || "{}");
-    const { title, description, price, count, image } = body;
+    console.log("Parsed request body:", body);
 
-    console.log("Parsed request body:", { title, description, price, count, image });
+    const productService = new ProductService(
+      client,
+      process.env.PRODUCTS_TABLE!,
+      process.env.STOCK_TABLE!
+    );
 
-    const validationErrors: string[] = [];
-
-    if (!title || typeof title !== "string" || title.trim() === "") {
-      validationErrors.push("Title is required and must be a non-empty string");
-    }
-
-    if (
-      price === undefined ||
-      price === null ||
-      typeof price !== "number" ||
-      price <= 0
-    ) {
-      validationErrors.push("Price is required and must be a positive number");
-    }
-
-    if (
-      count === undefined ||
-      count === null ||
-      typeof count !== "number" ||
-      count < 0
-    ) {
-      validationErrors.push(
-        "Count is required and must be a non-negative number"
-      );
-    }
+    const sanitizedInput = productService.sanitizeProductInput(body);
+    const validationErrors = productService.validateProduct(sanitizedInput);
 
     if (validationErrors.length > 0) {
       console.log("Validation failed:", validationErrors);
@@ -60,59 +38,22 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         headers: { "Content-Type": "application/json", ...CORS_HEADERS },
         body: JSON.stringify({
           message: "Invalid product data",
-          errors: validationErrors,
+          errors: validationErrors.map(e => e.message),
         }),
       };
     }
 
-    const id = uuidv4();
+    console.log("Creating product using transaction");
+    console.log("Transaction will ensure both product and stock records are created atomically");
 
-    console.log("Creating product with ID using transaction:", id);
-    console.log(
-      "Transaction will ensure both product and stock records are created atomically"
-    );
+    const createdProduct = await productService.createProduct(sanitizedInput);
 
-    const transactionCommand = new TransactWriteItemsCommand({
-      TransactItems: [
-        {
-          Put: {
-            TableName: process.env.PRODUCTS_TABLE!,
-            Item: {
-              id: { S: id },
-              title: { S: title },
-              description: { S: description || "" },
-              price: { N: price.toString() },
-              ...(image && { image: { S: image } }),
-            },
-            ConditionExpression: "attribute_not_exists(id)",
-          },
-        },
-        {
-          Put: {
-            TableName: process.env.STOCK_TABLE!,
-            Item: {
-              product_id: { S: id },
-              count: { N: count.toString() },
-            },
-            ConditionExpression: "attribute_not_exists(product_id)",
-          },
-        },
-      ],
-    });
-
-    console.log("Executing DynamoDB transaction for product creation");
-    await client.send(transactionCommand);
-
-    const responseData = { id, title, description, price, count, ...(image && { image }) };
-    console.log(
-      "Product and stock created successfully in transaction:",
-      responseData
-    );
+    console.log("Product and stock created successfully in transaction:", createdProduct);
 
     return {
       statusCode: 201,
       headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-      body: JSON.stringify(responseData),
+      body: JSON.stringify(createdProduct),
     };
   } catch (err: any) {
     console.error("Error in createProduct transaction:", err);
