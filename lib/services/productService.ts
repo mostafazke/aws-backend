@@ -3,7 +3,7 @@ import {
   TransactWriteItemsCommand,
 } from "@aws-sdk/client-dynamodb";
 import { Product } from "../../data/products";
-const uuidv4 = require("uuid").v4;
+import { v4 as uuidv4 } from "uuid";
 
 export interface ProductInput {
   title: string;

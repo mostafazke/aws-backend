@@ -4,7 +4,7 @@ import { APIGatewayProxyHandler } from "aws-lambda";
 const client = new DynamoDBClient({ region: "us-east-1" });
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "https://d8331wah0ee5g.cloudfront.net",
+  "Access-Control-Allow-Origin": "https://dlyghcisi7wvo.cloudfront.net",
   "Access-Control-Allow-Credentials": "true",
 };
 
@@ -30,10 +30,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     const products = productsRes.Items?.map((p) => ({
       id: p.id.S,
       title: p.title.S,
-      description: p.description.S,
+      description: p.description?.S || "",
       price: Number(p.price.N),
       count: Number(stockRes.Items?.find((s) => s.product_id.S === p.id.S)?.count.N) || 0,
-      image: p.image.S,
+      image: p.image?.S || "",
     }));
 
     console.log("Successfully processed products list:", products?.length || 0, "products");
