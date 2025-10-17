@@ -5,12 +5,23 @@ import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as path from "path";
 import { Construct } from "constructs";
+import * as sqs from "aws-cdk-lib/aws-sqs";
+
+interface ImportServiceStackProps extends cdk.StackProps {
+  catalogItemsQueue: sqs.IQueue;
+}
 
 export class ImportServiceStack extends cdk.Stack {
   public readonly importBucket: s3.Bucket;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: ImportServiceStackProps) {
     super(scope, id, props);
+
+    const { catalogItemsQueue } = props;
+
+    if (!catalogItemsQueue) {
+      throw new Error("catalogItemsQueue must be provided to ImportServiceStack");
+    }
 
     this.importBucket = new s3.Bucket(this, "ImportBucket", {
       versioned: true,
@@ -34,7 +45,7 @@ export class ImportServiceStack extends cdk.Stack {
         memorySize: 1024,
         timeout: cdk.Duration.seconds(5),
         handler: "importProductsFile.handler",
-        code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+        code: lambda.Code.fromAsset(path.resolve(__dirname, "../../lib/handlers")),
         environment: {
           IMPORT_BUCKET_NAME: this.importBucket.bucketName,
         },
@@ -46,14 +57,16 @@ export class ImportServiceStack extends cdk.Stack {
       memorySize: 1024,
       timeout: cdk.Duration.seconds(30),
       handler: "importFileParser.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      code: lambda.Code.fromAsset(path.resolve(__dirname, "../../lib/handlers")),
       environment: {
         IMPORT_BUCKET_NAME: this.importBucket.bucketName,
+        CATALOG_ITEMS_QUEUE_URL: catalogItemsQueue.queueUrl,
       },
     });
 
     this.importBucket.grantReadWrite(importProductsFileFn);
     this.importBucket.grantReadWrite(importFileParserFn);
+    catalogItemsQueue.grantSendMessages(importFileParserFn);
 
     // API Gateway
     const api = new apigateway.RestApi(this, "ImportServiceApi", {

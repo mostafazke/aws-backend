@@ -8,8 +8,13 @@ import { S3Event, S3Handler } from "aws-lambda";
 import csv from "csv-parser";
 import { Readable } from "stream";
 import { Product } from "../../data/products";
+import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 
 const s3Client = new S3Client({
+  region: process.env.AWS_REGION || "us-east-1",
+});
+
+const sqsClient = new SQSClient({
   region: process.env.AWS_REGION || "us-east-1",
 });
 
@@ -86,6 +91,15 @@ export const handler: S3Handler = async (event: S3Event) => {
 
       let recordCount = 0;
       let errorCount = 0;
+      const sqsSendPromises: Promise<void>[] = [];
+      const queueUrl = process.env.CATALOG_ITEMS_QUEUE_URL;
+
+      if (!queueUrl) {
+        console.error(
+          "CATALOG_ITEMS_QUEUE_URL environment variable is not set"
+        );
+        return;
+      }
 
       await new Promise<void>((resolve, reject) => {
         stream
@@ -93,29 +107,74 @@ export const handler: S3Handler = async (event: S3Event) => {
           .on("data", (data: Product) => {
             recordCount++;
             try {
-              console.log(`Record ${recordCount}:`, {
-                title: data.title,
-                description: data.description,
-                price: data.price,
-                count: data.count,
-                image: data.image,
-              });
+              const title =
+                typeof data.title === "string" ? data.title.trim() : "";
+              const price = Number(data.price);
+              const count = data.count === undefined ? 0 : Number(data.count);
 
-              // Validate required fields
-              if (!data.title || !data.price) {
+              if (!title || !Number.isFinite(price) || price <= 0) {
                 console.warn(
-                  `Record ${recordCount} missing required fields (title or price)`
+                  `Record ${recordCount} skipped due to invalid title or price`
                 );
                 errorCount++;
+                return;
               }
+
+              if (!Number.isFinite(count) || count < 0) {
+                console.warn(
+                  `Record ${recordCount} skipped due to invalid count`
+                );
+                errorCount++;
+                return;
+              }
+
+              const payload = {
+                title,
+                description:
+                  typeof data.description === "string" ? data.description : "",
+                price,
+                count,
+                ...(data.image ? { image: data.image } : {}),
+              };
+
+              sqsSendPromises.push(
+                sqsClient
+                  .send(
+                    new SendMessageCommand({
+                      QueueUrl: queueUrl,
+                      MessageBody: JSON.stringify(payload),
+                    })
+                  )
+                  .then(() => {
+                    return;
+                  })
+                  .catch((error) => {
+                    console.error(
+                      `Failed to enqueue record ${recordCount} to SQS:`,
+                      error
+                    );
+                    errorCount++;
+                  })
+              );
             } catch (error) {
               console.error(`Error processing record ${recordCount}:`, error);
               errorCount++;
             }
           })
           .on("end", async () => {
+            try {
+              await Promise.all(sqsSendPromises);
+            } catch (aggregateError) {
+              console.error(
+                `One or more SQS send operations failed for ${objectKey}:`,
+                aggregateError
+              );
+            }
+
             console.log(
-              `Finished processing ${objectKey}. Total records: ${recordCount}, Errors: ${errorCount}`
+              `Finished processing ${objectKey}. Total records: ${recordCount}, Successfully enqueued: ${
+                recordCount - errorCount
+              }, Errors: ${errorCount}`
             );
 
             try {

@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "lib": [
       "es2022"
     ],
@@ -24,6 +24,8 @@
     "strictPropertyInitialization": false,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "typeRoots": [
       "./node_modules/@types"
     ]

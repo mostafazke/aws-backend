@@ -4,5 +4,8 @@ import { ProductServiceStack } from "../lib/product-service-stack";
 import { ImportServiceStack } from "../lib/import-service-stack";
 
 const app = new cdk.App();
-new ProductServiceStack(app, "AwsBackendStack", {});
-new ImportServiceStack(app, "ImportServiceStack", {});
+const productServiceStack = new ProductServiceStack(app, "ProductServiceStack");
+
+new ImportServiceStack(app, "ImportServiceStack", {
+  catalogItemsQueue: productServiceStack.catalogItemsQueue,
+});

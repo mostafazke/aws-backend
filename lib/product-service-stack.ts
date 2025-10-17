@@ -1,59 +1,129 @@
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as cdk from "aws-cdk-lib";
 import * as path from "path";
 import { Construct } from "constructs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as sqs from "aws-cdk-lib/aws-sqs";
+import * as sns from "aws-cdk-lib/aws-sns";
+import * as subscriptions from "aws-cdk-lib/aws-sns-subscriptions";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
 export class ProductServiceStack extends cdk.Stack {
+  public readonly catalogItemsQueue: sqs.Queue;
+
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const productsTable = new dynamodb.Table(this, "ProductsTable", {
-      tableName: "products",
-      partitionKey: { name: "id", type: dynamodb.AttributeType.STRING },
-    });
+    const productsTable = dynamodb.Table.fromTableName(
+      this,
+      "ProductsTable",
+      "products"
+    );
 
-    const stockTable = new dynamodb.Table(this, "StockTable", {
-      tableName: "stock",
-      partitionKey: { name: "product_id", type: dynamodb.AttributeType.STRING },
-    });
+    const stockTable = dynamodb.Table.fromTableName(
+      this,
+      "StockTable",
+      "stock"
+    );
 
-    const getProductsListFn = new lambda.Function(this, "GetProductsListFn", {
+    const getProductsListFn = new NodejsFunction(this, "GetProductsListFn", {
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(5),
-      handler: "getProductsList.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      entry: path.resolve(__dirname, "../../lib/handlers/getProductsList.ts"),
+      handler: "handler",
+      bundling: {
+        externalModules: ["@aws-sdk/*"],
+        forceDockerBundling: false,
+      },
       environment: {
         PRODUCTS_TABLE: productsTable.tableName,
         STOCK_TABLE: stockTable.tableName,
       },
     });
 
-    const getProductsByIdFn = new lambda.Function(this, "GetProductsByIdFn", {
+    const getProductsByIdFn = new NodejsFunction(this, "GetProductsByIdFn", {
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(5),
-      handler: "getProductsById.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      entry: path.resolve(__dirname, "../../lib/handlers/getProductsById.ts"),
+      handler: "handler",
+      bundling: {
+        externalModules: ["@aws-sdk/*"],
+        forceDockerBundling: false,
+      },
       environment: {
         PRODUCTS_TABLE: productsTable.tableName,
         STOCK_TABLE: stockTable.tableName,
       },
     });
 
-    const createProductFn = new lambda.Function(this, "CreateProductFn", {
+    const createProductFn = new NodejsFunction(this, "CreateProductFn", {
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(5),
-      handler: "createProduct.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "./handlers")),
+      entry: path.resolve(__dirname, "../../lib/handlers/createProduct.ts"),
+      handler: "handler",
+      bundling: {
+        externalModules: ["@aws-sdk/*"],
+        forceDockerBundling: false,
+      },
       environment: {
         PRODUCTS_TABLE: productsTable.tableName,
         STOCK_TABLE: stockTable.tableName,
       },
     });
+
+    this.catalogItemsQueue = new sqs.Queue(this, "catalog-items-queue", {
+      queueName: "catalogItemsQueue",
+      visibilityTimeout: cdk.Duration.seconds(60),
+    });
+
+    const createProductTopic = new sns.Topic(this, "CreateProductTopic", {
+      topicName: "createProductTopic",
+    });
+
+    const createProductNotificationEmail = new cdk.CfnParameter(
+      this,
+      "CreateProductNotificationEmail",
+      {
+        type: "String",
+        description:
+          "Email address that receives notifications about newly created products.",
+        allowedPattern: "^.+@.+\\..+$",
+        constraintDescription: "Must be a valid email address.",
+        default: "mostafazke@gmail.com",
+      }
+    );
+
+    createProductTopic.addSubscription(
+      new subscriptions.EmailSubscription(
+        createProductNotificationEmail.valueAsString
+      )
+    );
+
+    const catalogBatchProcessLambda = new NodejsFunction(
+      this,
+      "catalog-batch-process",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(60),
+        entry: path.resolve(__dirname, "../../lib/handlers/catalogBatchProcess.ts"),
+        handler: "handler",
+        bundling: {
+          externalModules: ["@aws-sdk/*"],
+          forceDockerBundling: false,
+        },
+        environment: {
+          PRODUCTS_TABLE: productsTable.tableName,
+          STOCK_TABLE: stockTable.tableName,
+          CREATE_PRODUCT_TOPIC_ARN: createProductTopic.topicArn,
+        },
+      }
+    );
 
     const api = new apigateway.RestApi(this, "ProductServiceApi", {
       restApiName: "Product Service API",
@@ -86,10 +156,24 @@ export class ProductServiceStack extends cdk.Stack {
     productsTable.grantReadData(getProductsListFn);
     productsTable.grantReadData(getProductsByIdFn);
     productsTable.grantWriteData(createProductFn);
+    productsTable.grantWriteData(catalogBatchProcessLambda);
     stockTable.grantReadData(getProductsListFn);
     stockTable.grantReadData(getProductsByIdFn);
     stockTable.grantWriteData(createProductFn);
+    stockTable.grantWriteData(catalogBatchProcessLambda);
+
+    createProductTopic.grantPublish(catalogBatchProcessLambda);
+
+    catalogBatchProcessLambda.addEventSource(
+      new SqsEventSource(this.catalogItemsQueue, { batchSize: 5 })
+    );
 
     new cdk.CfnOutput(this, "ApiUrl", { value: api.url });
+    new cdk.CfnOutput(this, "CatalogItemsQueueUrl", {
+      value: this.catalogItemsQueue.queueUrl,
+    });
+    new cdk.CfnOutput(this, "CreateProductTopicArn", {
+      value: createProductTopic.topicArn,
+    });
   }
 }
