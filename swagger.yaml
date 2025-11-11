@@ -46,7 +46,7 @@ paths:
             Access-Control-Allow-Origin:
               schema:
                 type: string
-                example: "https://d8331wah0ee5g.cloudfront.net"
+                example: "https://dlyghcisi7wvo.cloudfront.net"
             Access-Control-Allow-Credentials:
               schema:
                 type: string
@@ -81,7 +81,7 @@ paths:
             Access-Control-Allow-Origin:
               schema:
                 type: string
-                example: "https://d8331wah0ee5g.cloudfront.net"
+                example: "https://dlyghcisi7wvo.cloudfront.net"
             Access-Control-Allow-Credentials:
               schema:
                 type: string
@@ -135,7 +135,7 @@ paths:
             Access-Control-Allow-Origin:
               schema:
                 type: string
-                example: "https://d8331wah0ee5g.cloudfront.net"
+                example: "https://dlyghcisi7wvo.cloudfront.net"
             Access-Control-Allow-Credentials:
               schema:
                 type: string

@@ -4,7 +4,7 @@ import { APIGatewayEvent, APIGatewayProxyHandler } from "aws-lambda";
 const client = new DynamoDBClient({ region: "us-east-1" });
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "https://d8331wah0ee5g.cloudfront.net",
+  "Access-Control-Allow-Origin": "https://dlyghcisi7wvo.cloudfront.net",
   "Access-Control-Allow-Credentials": "true",
 };
 
